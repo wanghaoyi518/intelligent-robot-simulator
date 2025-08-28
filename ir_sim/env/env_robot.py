@@ -19,12 +19,16 @@ class env_robot:
         self.circular = kwargs.get('circular', [5, 5, 4] )
         self.random_bear = kwargs.get('random_bear', False)
         self.random_radius = kwargs.get('random_radius', False)
+        self.max_start_goal_distance = kwargs.get('max_start_goal_distance', 5.0)
 
 
         # init_mode: 0 manually initialize
         #            1 single row
         #            2 random
         #            3 circular 
+        #            4 random 2
+        #            5 corridor
+        #            6 random with distance constraint
         # kwargs: random_bear random radius
         if self.robot_number > 0:
             if self.init_mode == 0:
@@ -45,7 +49,10 @@ class env_robot:
     def init_state_distribute(self, init_mode=1, radius=0.2):
         # init_mode: 1 single row
         #            2 random
-        #            3 circular      
+        #            3 circular 
+        #            4 random 2
+        #            5 corridor
+        #            6 random with distance constraint     
         # square area: x_min, y_min, x_max, y_max
         # circular area: x, y, radius
         
@@ -103,6 +110,10 @@ class env_robot:
             goal_list2 = [np.array([ [i * self.interval], [self.square[1]], [pi/2] ]) for i in range(int(self.square[0]), int(self.square[0])+half_num)]
             
             state_list, goal_list = state_list1+state_list2, goal_list1+goal_list2
+        
+        elif init_mode == 6:
+            # random with distance constraint
+            state_list, goal_list = self.random_start_goal_constrained(max_distance=self.max_start_goal_distance)
                     
         if self.random_bear:
             for state in state_list:
@@ -153,6 +164,57 @@ class env_robot:
             goal_list.append(np.delete(goal, 2, 0))
 
         return goal_list
+
+    def random_start_goal_constrained(self, max_distance=5.0):
+        """
+        Generate random start and goal points with distance constraint.
+        Each agent's goal point must be within max_distance from its start point.
+        """
+        num = self.robot_number
+        start_list = []
+        goal_list = []
+        
+        # First, generate all valid start points
+        while len(start_list) < num:
+            new_start = np.random.uniform(low=self.square[0:2]+[-pi], high=self.square[2:4]+[pi], size=(1, 3)).T
+            
+            if not self.check_collision(new_start, start_list, self.com, self.interval):
+                start_list.append(new_start)
+        
+        # Then, for each start point, generate a goal point within max_distance
+        for start_point in start_list:
+            max_attempts = 1000  # Prevent infinite loop
+            attempts = 0
+            goal_found = False
+            
+            while not goal_found and attempts < max_attempts:
+                # Generate random angle and distance
+                angle = np.random.uniform(0, 2*pi)
+                distance = np.random.uniform(0, max_distance)
+                
+                # Calculate goal position relative to start
+                goal_x = start_point[0, 0] + distance * cos(angle)
+                goal_y = start_point[1, 0] + distance * sin(angle)
+                
+                # Check if goal is within the environment boundaries
+                if (self.square[0] <= goal_x <= self.square[2] and 
+                    self.square[1] <= goal_y <= self.square[3]):
+                    
+                    goal_point = np.array([[goal_x], [goal_y], [0]])  # Add dummy angle for collision check
+                    
+                    # Check collision for goal point (only against obstacles, not other goals)
+                    if not self.check_collision(goal_point, [], self.com, self.interval/2):
+                        goal_list.append(np.array([[goal_x], [goal_y]]))  # Remove angle for final goal
+                        goal_found = True
+                
+                attempts += 1
+            
+            # Fallback: if no valid goal found within max_distance, use the start point as goal
+            if not goal_found:
+                print(f"Warning: Could not find valid goal within distance {max_distance} for start point {start_point[0:2].T}, using start as goal.")
+                goal_list.append(start_point[0:2])  # Use start position as goal (no movement)
+        
+        return start_list, goal_list
 
     def distance(self, point1, point2):
         diff = point2[0:2] - point1[0:2]
@@ -239,6 +301,13 @@ class env_robot:
         elif reset_mode == 4:
             goal_list = self.random_goal()
             for i in range(self.robot_number):
+                self.robot_list[i].goal = goal_list[i]
+                self.robot_list[i].reset(self.random_bear)
+        
+        elif reset_mode == 6:
+            state_list, goal_list = self.random_start_goal_constrained(max_distance=self.max_start_goal_distance)
+            for i in range(self.robot_number):
+                self.robot_list[i].init_state = state_list[i]
                 self.robot_list[i].goal = goal_list[i]
                 self.robot_list[i].reset(self.random_bear)
 

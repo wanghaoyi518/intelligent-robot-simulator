@@ -12,8 +12,7 @@ from ir_sim.env.env_obs_line import env_obs_line
 from ir_sim.env.env_obs_poly import env_obs_poly
 from ir_sim.env.env_grid import env_grid
 from PIL import Image
-from pynput import keyboard
-
+# from pynput import keyboard
 class env_base:
 
     def __init__(self, world_name=None, plot=True,  **kwargs):
@@ -78,6 +77,14 @@ class env_base:
         self.init_environment(**kwargs)
 
         if kwargs.get('teleop_key', False):
+            try:
+                from pynput import keyboard
+            except ImportError:
+                raise ImportError("pynput is required for keyboard control. Install it with: pip install pynput")
+            except Exception as e:
+                raise RuntimeError(f"Failed to initialize pynput keyboard module. "
+                                 f"This may happen in headless environments or when DISPLAY is not set. "
+                                 f"Error: {e}. If you don't need keyboard control, remove 'teleop_key=True' from the environment configuration.")
             
             self.key_lv_max = 2
             self.key_ang_max = 2
