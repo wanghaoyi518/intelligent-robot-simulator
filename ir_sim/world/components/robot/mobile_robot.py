@@ -266,6 +266,22 @@ class mobile_robot():
             return True
 
         # check collision among robots 
+        # for robot in components['robots'].robot_list:
+        #     if robot.id != self.id and not robot.collision_flag:
+        #         temp_circle = circle(robot.state[0, 0], robot.state[1, 0], robot.radius)
+        #         if collision_cir_cir(self_circle, temp_circle):
+                    
+        #             robot.collision_flag = True
+        #             self.collision_flag = True
+        #             print(f'collisions between robots {self.id} and {robot.id}')
+                    
+        #             # 记录碰撞对信息到components中，供后续使用
+        #             if 'collision_pairs' not in components:
+        #                 components['collision_pairs'] = []
+        #             components['collision_pairs'].append((self.id, robot.id))
+                    
+        #             return True
+                # check collision among robots 
         for robot in components['robots'].robot_list:
             if not robot.collision_flag:
                 temp_circle = circle(robot.state[0, 0], robot.state[1, 0], robot.radius)
@@ -275,6 +291,7 @@ class mobile_robot():
                     self.collision_flag = True
                     print('collisions between robots')
                     return True
+
 
         # check collision with obstacles
         for obs_cir in components['obs_circles'].obs_cir_list:
@@ -298,6 +315,24 @@ class mobile_robot():
                 print('collisions between obstacles')
                 return True
         
+        # # Check collision with polygon obstacles (only if they exist)
+        # if 'obs_polygons' in components and components['obs_polygons'] is not None:
+        #     for polygon in components['obs_polygons'].obs_poly_list:
+        #         # Check if robot center is inside polygon
+        #         robot_center = np.array([[self.state[0, 0]], [self.state[1, 0]]])
+        #         is_inside, _ = polygon.inside_collision(robot_center)
+        #         if is_inside:
+        #             self.collision_flag = True
+        #             print('robot inside polygon obstacle')
+        #             return True
+                
+        #         # Check collision with polygon edges
+        #         for edge in polygon.edge_list:
+        #             segment = [ point(edge[0], edge[1]), point(edge[2], edge[3]) ]
+        #             if collision_cir_seg(self_circle, segment):
+        #                 self.collision_flag = True
+        #                 print('collisions between polygon obstacles')
+        #                 return True
         for polygon in components['obs_polygons'].obs_poly_list:
             for edge in polygon.edge_list:
                 segment = [ point(edge[0], edge[1]), point(edge[2], edge[3]) ]

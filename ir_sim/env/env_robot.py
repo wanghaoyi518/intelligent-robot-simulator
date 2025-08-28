@@ -179,6 +179,21 @@ class env_robot:
             if collision_cir_seg(self_circle, segment):
                 return True
 
+        # # check collision with polygon obstacles (only if they exist)
+        # if 'obs_polygons' in components and components['obs_polygons'] is not None:
+        #     for polygon in components['obs_polygons'].obs_poly_list:
+        #         # Check if the circle center is inside the polygon
+        #         point_to_check = np.array([[check_point[0, 0]], [check_point[1, 0]]])
+        #         is_inside, _ = polygon.inside_collision(point_to_check)
+        #         if is_inside:
+        #             return True
+                
+        #         # Also check collision with polygon edges
+        #         for edge in polygon.edge_list:
+        #             segment = [point(edge[0], edge[1]), point(edge[2], edge[3])]
+        #             if collision_cir_seg(self_circle, segment):
+        #                 return True
+
         for point in point_list:
             if self.distance(check_point, point) < range:
                 return True
