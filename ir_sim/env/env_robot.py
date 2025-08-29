@@ -52,7 +52,8 @@ class env_robot:
         #            3 circular 
         #            4 random 2
         #            5 corridor
-        #            6 random with distance constraint     
+        #            6 random with distance constraint
+        #            7 random with distance constraint + random polygons
         # square area: x_min, y_min, x_max, y_max
         # circular area: x, y, radius
         
@@ -114,6 +115,10 @@ class env_robot:
         elif init_mode == 6:
             # random with distance constraint
             state_list, goal_list = self.random_start_goal_constrained(max_distance=self.max_start_goal_distance)
+        
+        elif init_mode == 7:
+            # Mode 7: random with distance constraint + random polygons
+            state_list, goal_list = self.random_start_goal_with_polygons(max_distance=self.max_start_goal_distance)
                     
         if self.random_bear:
             for state in state_list:
@@ -215,6 +220,128 @@ class env_robot:
                 goal_list.append(start_point[0:2])  # Use start position as goal (no movement)
         
         return start_list, goal_list
+    
+    def random_start_goal_with_polygons(self, max_distance=5.0):
+        """
+        Mode 7: Generate random start and goal points with distance constraint,
+        avoiding random polygon obstacles.
+        """
+        num = self.robot_number
+        start_list = []
+        goal_list = []
+        
+        # 获取多边形障碍物信息
+        polygon_env = self.com.get('obs_polygons', None)
+        if polygon_env is None or not hasattr(polygon_env, 'obs_poly_list'):
+            print("⚠️  Mode 7: 未找到多边形障碍物，退回到Mode 6行为")
+            return self.random_start_goal_constrained(max_distance)
+        
+        polygons_list = [poly.vertexes.T.tolist() for poly in polygon_env.obs_poly_list]
+        
+        # 获取安全的生成点
+        safe_radius = 0.2  # 默认机器人半径
+        safe_margin = 0.3  # 安全边距
+        
+        print(f"🔶 Mode 7: 在{len(polygons_list)}个多边形障碍物中生成{num}个机器人位置")
+        
+        # 生成起点
+        max_attempts = 2000
+        attempts = 0
+        
+        while len(start_list) < num and attempts < max_attempts:
+            # 随机生成候选起点
+            new_start = np.random.uniform(
+                low=self.square[0:2]+[-pi], 
+                high=self.square[2:4]+[pi], 
+                size=(1, 3)
+            ).T
+            
+            start_pos = new_start[0:2].flatten()
+            
+            # 检查与其他机器人的碰撞
+            collision_with_robots = self.check_collision(new_start, start_list, self.com, self.interval)
+            
+            # 检查与多边形障碍物的碰撞
+            collision_with_polygons = False
+            if polygons_list:
+                from ir_sim.util import check_agent_safe_distance
+                for polygon_vertices in polygons_list:
+                    if not check_agent_safe_distance(start_pos, safe_radius, polygon_vertices, safe_margin):
+                        collision_with_polygons = True
+                        break
+            
+            if not collision_with_robots and not collision_with_polygons:
+                start_list.append(new_start)
+                print(f"  ✅ 起点 {len(start_list)}: ({start_pos[0]:.2f}, {start_pos[1]:.2f})")
+            
+            attempts += 1
+        
+        if len(start_list) < num:
+            print(f"⚠️  只生成了{len(start_list)}个起点，需要{num}个")
+        
+        # 为每个起点生成终点
+        for i, start_point in enumerate(start_list):
+            max_goal_attempts = 1000
+            goal_attempts = 0
+            goal_found = False
+            
+            while not goal_found and goal_attempts < max_goal_attempts:
+                # 在最大距离内随机生成终点
+                angle = np.random.uniform(0, 2*pi)
+                distance = np.random.uniform(1.0, max_distance)  # 最小距离1.0避免起点终点太近
+                
+                # 计算终点位置
+                goal_x = start_point[0, 0] + distance * cos(angle)
+                goal_y = start_point[1, 0] + distance * sin(angle)
+                
+                # 检查是否在环境边界内
+                if not (self.square[0] <= goal_x <= self.square[2] and 
+                       self.square[1] <= goal_y <= self.square[3]):
+                    goal_attempts += 1
+                    continue
+                
+                goal_pos = [goal_x, goal_y]
+                
+                # 检查与多边形障碍物的碰撞
+                collision_with_polygons = False
+                if polygons_list:
+                    from ir_sim.util import check_agent_safe_distance, check_path_safe_distance
+                    
+                    # 检查终点是否安全
+                    for polygon_vertices in polygons_list:
+                        if not check_agent_safe_distance(goal_pos, safe_radius, polygon_vertices, safe_margin):
+                            collision_with_polygons = True
+                            break
+                    
+                    # 检查路径是否安全
+                    if not collision_with_polygons:
+                        start_pos = start_point[0:2].flatten()
+                        for polygon_vertices in polygons_list:
+                            if not check_path_safe_distance(start_pos, goal_pos, polygon_vertices, 
+                                                          path_width=safe_radius*2, safe_distance=0.2):
+                                collision_with_polygons = True
+                                break
+                
+                # 检查与其他障碍物的碰撞（使用原有的check_collision）
+                goal_point_3d = np.array([[goal_x], [goal_y], [0]])
+                collision_with_other = self.check_collision(goal_point_3d, [], self.com, self.interval/2)
+                
+                if not collision_with_polygons and not collision_with_other:
+                    goal_list.append(np.array([[goal_x], [goal_y]]))
+                    goal_found = True
+                    actual_distance = np.sqrt((goal_x - start_point[0, 0])**2 + (goal_y - start_point[1, 0])**2)
+                    print(f"  ✅ 终点 {i+1}: ({goal_x:.2f}, {goal_y:.2f}) 距离: {actual_distance:.2f}")
+                
+                goal_attempts += 1
+            
+            # 回退策略：如果无法找到有效终点
+            if not goal_found:
+                print(f"⚠️  机器人 {i+1}: 无法找到有效终点，使用起点作为终点")
+                goal_list.append(start_point[0:2])
+        
+        print(f"🎯 Mode 7: 成功生成 {len(start_list)} 个起点和 {len(goal_list)} 个终点")
+        
+        return start_list, goal_list
 
     def distance(self, point1, point2):
         diff = point2[0:2] - point1[0:2]
@@ -306,6 +433,14 @@ class env_robot:
         
         elif reset_mode == 6:
             state_list, goal_list = self.random_start_goal_constrained(max_distance=self.max_start_goal_distance)
+            for i in range(self.robot_number):
+                self.robot_list[i].init_state = state_list[i]
+                self.robot_list[i].goal = goal_list[i]
+                self.robot_list[i].reset(self.random_bear)
+        
+        elif reset_mode == 7:
+            # Mode 7: random with distance constraint + random polygons
+            state_list, goal_list = self.random_start_goal_with_polygons(max_distance=self.max_start_goal_distance)
             for i in range(self.robot_number):
                 self.robot_list[i].init_state = state_list[i]
                 self.robot_list[i].goal = goal_list[i]

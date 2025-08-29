@@ -52,6 +52,10 @@ class env_base:
                 self.obs_polygons_args = com_list.get('obs_polygons', dict())
                 self.vertexes_list = self.obs_polygons_args.get('vertexes_list', [])
                 self.obs_poly_num = self.obs_polygons_args.get('number', 0)
+                
+                # obs_polygons_random (Mode 7 新增)
+                self.obs_polygons_random_args = com_list.get('obs_polygons_random', dict())
+                self.obs_polygons_random_enable = self.obs_polygons_random_args.get('enable', False)
         else:
             self.__height = kwargs.get('world_height', 10)
             self.__width = kwargs.get('world_width', 10)
@@ -71,6 +75,10 @@ class env_base:
             self.obs_polygons_args = kwargs.get('obs_polygons', dict())
             self.vertexes_list = self.obs_polygons_args.get('vertexes_list', [])
             self.obs_poly_num = self.obs_polygons_args.get('number', 0)
+            
+            # obs_polygons_random (Mode 7 新增)
+            self.obs_polygons_random_args = kwargs.get('obs_polygons_random', dict())
+            self.obs_polygons_random_enable = self.obs_polygons_random_args.get('enable', False)
         
         self.plot = plot
         self.components = dict()
@@ -149,7 +157,26 @@ class env_base:
         self.components['obs_circles'] = env_obs_cir(obs_cir_class=obs_cir_class, obs_cir_num=self.obs_cir_number, step_time=self.step_time, components=self.components, **{**self.obs_cirs_args, **kwargs})
         self.obs_cir_list = self.components['obs_circles'].obs_cir_list
 
-        self.components['obs_polygons'] = env_obs_poly(obs_poly_class=obs_polygon_class, vertex_list=self.vertexes_list, obs_poly_num=self.obs_poly_num, **{**self.obs_polygons_args, **kwargs})
+        # Mode 7 支持：根据配置选择多边形环境管理器
+        if self.obs_polygons_random_enable:
+            # 使用随机多边形环境管理器
+            from ir_sim.env.env_obs_poly_random import env_obs_poly_random
+            world_bounds = [0, 0, self.__width, self.__height]
+            self.components['obs_polygons'] = env_obs_poly_random(
+                obs_poly_class=obs_polygon_class, 
+                components=self.components,
+                world_bounds=world_bounds,
+                **{**self.obs_polygons_random_args, **kwargs}
+            )
+        else:
+            # 使用固定多边形环境管理器
+            self.components['obs_polygons'] = env_obs_poly(
+                obs_poly_class=obs_polygon_class, 
+                vertex_list=self.vertexes_list, 
+                obs_poly_num=self.obs_poly_num, 
+                **{**self.obs_polygons_args, **kwargs}
+            )
+        
         self.obs_poly_list = self.components['obs_polygons'].obs_poly_list        
 
         self.components['robots'] = env_robot(robot_class=robot_class, step_time=self.step_time, components=self.components, **{**self.robots_args, **kwargs})
