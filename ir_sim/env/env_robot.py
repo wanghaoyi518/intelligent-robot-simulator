@@ -19,7 +19,7 @@ class env_robot:
         self.circular = kwargs.get('circular', [5, 5, 4] )
         self.random_bear = kwargs.get('random_bear', False)
         self.random_radius = kwargs.get('random_radius', False)
-        self.max_start_goal_distance = kwargs.get('max_start_goal_distance', 5.0)
+        self.max_start_goal_distance = kwargs.get('max_start_goal_distance', 1.0)
 
 
         # init_mode: 0 manually initialize
@@ -221,7 +221,7 @@ class env_robot:
         
         return start_list, goal_list
     
-    def random_start_goal_with_polygons(self, max_distance=5.0):
+    def random_start_goal_with_polygons(self, max_distance=1.0):
         """
         Mode 7: Generate random start and goal points with distance constraint,
         avoiding random polygon obstacles.
@@ -242,7 +242,7 @@ class env_robot:
         safe_radius = 0.2  # 默认机器人半径
         safe_margin = 0.3  # 安全边距
         
-        print(f"🔶 Mode 7: 在{len(polygons_list)}个多边形障碍物中生成{num}个机器人位置")
+        # print(f"🔶 Mode 7: 在{len(polygons_list)}个多边形障碍物中生成{num}个机器人位置")
         
         # 生成起点
         max_attempts = 2000
@@ -272,7 +272,7 @@ class env_robot:
             
             if not collision_with_robots and not collision_with_polygons:
                 start_list.append(new_start)
-                print(f"  ✅ 起点 {len(start_list)}: ({start_pos[0]:.2f}, {start_pos[1]:.2f})")
+                # print(f"  ✅ 起点 {len(start_list)}: ({start_pos[0]:.2f}, {start_pos[1]:.2f})")
             
             attempts += 1
         
@@ -330,16 +330,16 @@ class env_robot:
                     goal_list.append(np.array([[goal_x], [goal_y]]))
                     goal_found = True
                     actual_distance = np.sqrt((goal_x - start_point[0, 0])**2 + (goal_y - start_point[1, 0])**2)
-                    print(f"  ✅ 终点 {i+1}: ({goal_x:.2f}, {goal_y:.2f}) 距离: {actual_distance:.2f}")
+                    # print(f"  ✅ 终点 {i+1}: ({goal_x:.2f}, {goal_y:.2f}) 距离: {actual_distance:.2f}")
                 
                 goal_attempts += 1
             
             # 回退策略：如果无法找到有效终点
             if not goal_found:
-                print(f"⚠️  机器人 {i+1}: 无法找到有效终点，使用起点作为终点")
+                # print(f"⚠️  机器人 {i+1}: 无法找到有效终点，使用起点作为终点")
                 goal_list.append(start_point[0:2])
         
-        print(f"🎯 Mode 7: 成功生成 {len(start_list)} 个起点和 {len(goal_list)} 个终点")
+        # print(f"🎯 Mode 7: 成功生成 {len(start_list)} 个起点和 {len(goal_list)} 个终点")
         
         return start_list, goal_list
 

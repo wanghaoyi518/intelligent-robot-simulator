@@ -47,6 +47,9 @@ class mobile_robot():
         self.radius_collision = round(radius + kwargs.get('radius_exp', 0.1), 2)
         self.arrive_flag = False
         self.collision_flag = False
+        
+        # Collision information for failure reason tracking
+        self.collision_info = None
 
         lidar_args = kwargs.get('lidar2d', None)
 
@@ -273,6 +276,23 @@ class mobile_robot():
                     
                     robot.collision_flag = True
                     self.collision_flag = True
+                    
+                    # Record collision information
+                    self.collision_info = {
+                        'type': 'robot_robot',
+                        'robot_id': self.id,
+                        'other_robot_id': robot.id,
+                        'position': [self.state[0, 0], self.state[1, 0]],
+                        'other_position': [robot.state[0, 0], robot.state[1, 0]]
+                    }
+                    robot.collision_info = {
+                        'type': 'robot_robot',
+                        'robot_id': robot.id,
+                        'other_robot_id': self.id,
+                        'position': [robot.state[0, 0], robot.state[1, 0]],
+                        'other_position': [self.state[0, 0], self.state[1, 0]]
+                    }
+                    
                     print('collisions between robots')
                     return True
 
@@ -281,12 +301,32 @@ class mobile_robot():
             temp_circle = circle(obs_cir.state[0, 0], obs_cir.state[1, 0], obs_cir.radius)
             if collision_cir_cir(self_circle, temp_circle):
                 self.collision_flag = True
+                
+                # Record collision information
+                self.collision_info = {
+                    'type': 'robot_obstacle',
+                    'robot_id': self.id,
+                    'obstacle_type': 'circular',
+                    'obstacle_position': [obs_cir.state[0, 0], obs_cir.state[1, 0]],
+                    'obstacle_radius': obs_cir.radius,
+                    'robot_position': [self.state[0, 0], self.state[1, 0]]
+                }
+                
                 print('collisions with obstacles')
                 return True
         
         # check collision with map
         if collision_cir_matrix(self_circle, components['map_matrix'], components['xy_reso'], components['offset']):
             self.collision_flag = True
+            
+            # Record collision information
+            self.collision_info = {
+                'type': 'robot_obstacle',
+                'robot_id': self.id,
+                'obstacle_type': 'map',
+                'robot_position': [self.state[0, 0], self.state[1, 0]]
+            }
+            
             print('collisions with map obstacles')
             return True
 
@@ -295,6 +335,16 @@ class mobile_robot():
             segment = [point(line[0], line[1]), point(line[2], line[3])]
             if collision_cir_seg(self_circle, segment):
                 self.collision_flag = True
+                
+                # Record collision information
+                self.collision_info = {
+                    'type': 'robot_obstacle',
+                    'robot_id': self.id,
+                    'obstacle_type': 'line',
+                    'obstacle_position': [line[0], line[1], line[2], line[3]],  # [x1, y1, x2, y2]
+                    'robot_position': [self.state[0, 0], self.state[1, 0]]
+                }
+                
                 print('collisions between obstacles')
                 return True
         
@@ -303,6 +353,16 @@ class mobile_robot():
                 segment = [ point(edge[0], edge[1]), point(edge[2], edge[3]) ]
                 if collision_cir_seg(self_circle, segment):
                     self.collision_flag = True
+                    
+                    # Record collision information
+                    self.collision_info = {
+                        'type': 'robot_obstacle',
+                        'robot_id': self.id,
+                        'obstacle_type': 'polygon',
+                        'obstacle_position': [edge[0], edge[1], edge[2], edge[3]],  # [x1, y1, x2, y2]
+                        'robot_position': [self.state[0, 0], self.state[1, 0]]
+                    }
+                    
                     print('collisions between polygon obstacles')
                     return True
 
