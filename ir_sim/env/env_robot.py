@@ -19,7 +19,7 @@ class env_robot:
         self.circular = kwargs.get('circular', [5, 5, 4] )
         self.random_bear = kwargs.get('random_bear', False)
         self.random_radius = kwargs.get('random_radius', False)
-        self.max_start_goal_distance = kwargs.get('max_start_goal_distance', 1.0)
+        self.max_start_goal_distance = kwargs.get('max_start_goal_distance', 1.2)
 
 
         # init_mode: 0 manually initialize
@@ -29,9 +29,16 @@ class env_robot:
         #            4 random 2
         #            5 corridor
         #            6 random with distance constraint
+        #            7 random with distance constraint + random polygons
+        #            8 manually initialize from yaml (init_state_list/goal_list/radius_list)
         # kwargs: random_bear random radius
         if self.robot_number > 0:
             if self.init_mode == 0:
+                assert 'radius_list' and 'init_state_list' and 'goal_list' in kwargs.keys()
+                radius_list = kwargs['radius_list']
+                init_state_list = kwargs['init_state_list']
+                goal_list = kwargs['goal_list']
+            elif self.init_mode == 8:
                 assert 'radius_list' and 'init_state_list' and 'goal_list' in kwargs.keys()
                 radius_list = kwargs['radius_list']
                 init_state_list = kwargs['init_state_list']
@@ -54,6 +61,7 @@ class env_robot:
         #            5 corridor
         #            6 random with distance constraint
         #            7 random with distance constraint + random polygons
+        #            8 manually initialize from yaml (handled in __init__)
         # square area: x_min, y_min, x_max, y_max
         # circular area: x, y, radius
         
@@ -174,19 +182,33 @@ class env_robot:
         """
         Generate random start and goal points with distance constraint.
         Each agent's goal point must be within max_distance from its start point.
+        Ensures minimum 1.0m distance between any two start points and any two goal points.
         """
         num = self.robot_number
         start_list = []
         goal_list = []
+        min_distance = 1.0  # 最小距离要求
         
-        # First, generate all valid start points
+        # First, generate all valid start points - 确保起点之间距离至少1.0米
         while len(start_list) < num:
             new_start = np.random.uniform(low=self.square[0:2]+[-pi], high=self.square[2:4]+[pi], size=(1, 3)).T
             
-            if not self.check_collision(new_start, start_list, self.com, self.interval):
+            # 检查与其他起点的距离
+            collision_with_starts = False
+            for existing_start in start_list:
+                existing_pos = existing_start[0:2].flatten()
+                new_pos = new_start[0:2].flatten()
+                if np.linalg.norm(new_pos - existing_pos) < min_distance:
+                    collision_with_starts = True
+                    break
+            
+            # 检查与其他障碍物的碰撞
+            collision_with_obstacles = self.check_collision(new_start, [], self.com, self.interval/2)
+            
+            if not collision_with_starts and not collision_with_obstacles:
                 start_list.append(new_start)
         
-        # Then, for each start point, generate a goal point within max_distance
+        # Then, for each start point, generate a goal point within max_distance - 确保终点之间距离至少1.0米
         for start_point in start_list:
             max_attempts = 1000  # Prevent infinite loop
             attempts = 0
@@ -195,7 +217,7 @@ class env_robot:
             while not goal_found and attempts < max_attempts:
                 # Generate random angle and distance
                 angle = np.random.uniform(0, 2*pi)
-                distance = np.random.uniform(0, max_distance)
+                distance = np.random.uniform(1.0, max_distance)  # 最小距离1.0避免起点终点太近
                 
                 # Calculate goal position relative to start
                 goal_x = start_point[0, 0] + distance * cos(angle)
@@ -206,9 +228,20 @@ class env_robot:
                     self.square[1] <= goal_y <= self.square[3]):
                     
                     goal_point = np.array([[goal_x], [goal_y], [0]])  # Add dummy angle for collision check
+                    goal_pos = [goal_x, goal_y]
+                    
+                    # 检查与其他终点的距离
+                    collision_with_goals = False
+                    for existing_goal in goal_list:
+                        existing_pos = existing_goal[0:2].flatten()
+                        if np.linalg.norm(goal_pos - existing_pos) < min_distance:
+                            collision_with_goals = True
+                            break
                     
                     # Check collision for goal point (only against obstacles, not other goals)
-                    if not self.check_collision(goal_point, [], self.com, self.interval/2):
+                    collision_with_obstacles = self.check_collision(goal_point, [], self.com, self.interval/2)
+                    
+                    if not collision_with_goals and not collision_with_obstacles:
                         goal_list.append(np.array([[goal_x], [goal_y]]))  # Remove angle for final goal
                         goal_found = True
                 
@@ -221,10 +254,11 @@ class env_robot:
         
         return start_list, goal_list
     
-    def random_start_goal_with_polygons(self, max_distance=1.0):
+    def random_start_goal_with_polygons(self, max_distance=15.0):
         """
         Mode 7: Generate random start and goal points with distance constraint,
         avoiding random polygon obstacles.
+        Ensures minimum 1.0m distance between any two start points and any two goal points.
         """
         num = self.robot_number
         start_list = []
@@ -241,10 +275,11 @@ class env_robot:
         # 获取安全的生成点
         safe_radius = 0.2  # 默认机器人半径
         safe_margin = 0.3  # 安全边距
+        min_distance = 1.0  # 最小距离要求
         
         # print(f"🔶 Mode 7: 在{len(polygons_list)}个多边形障碍物中生成{num}个机器人位置")
         
-        # 生成起点
+        # 生成起点 - 确保起点之间距离至少1.0米
         max_attempts = 2000
         attempts = 0
         
@@ -258,8 +293,13 @@ class env_robot:
             
             start_pos = new_start[0:2].flatten()
             
-            # 检查与其他机器人的碰撞
-            collision_with_robots = self.check_collision(new_start, start_list, self.com, self.interval)
+            # 检查与其他起点的距离（使用1.0米最小距离）
+            collision_with_starts = False
+            for existing_start in start_list:
+                existing_pos = existing_start[0:2].flatten()
+                if np.linalg.norm(start_pos - existing_pos) < min_distance:
+                    collision_with_starts = True
+                    break
             
             # 检查与多边形障碍物的碰撞
             collision_with_polygons = False
@@ -270,7 +310,10 @@ class env_robot:
                         collision_with_polygons = True
                         break
             
-            if not collision_with_robots and not collision_with_polygons:
+            # 检查与其他障碍物的碰撞
+            collision_with_other = self.check_collision(new_start, [], self.com, self.interval/2)
+            
+            if not collision_with_starts and not collision_with_polygons and not collision_with_other:
                 start_list.append(new_start)
                 # print(f"  ✅ 起点 {len(start_list)}: ({start_pos[0]:.2f}, {start_pos[1]:.2f})")
             
@@ -279,7 +322,7 @@ class env_robot:
         if len(start_list) < num:
             print(f"⚠️  只生成了{len(start_list)}个起点，需要{num}个")
         
-        # 为每个起点生成终点
+        # 为每个起点生成终点 - 确保终点之间距离至少1.0米
         for i, start_point in enumerate(start_list):
             max_goal_attempts = 1000
             goal_attempts = 0
@@ -301,6 +344,14 @@ class env_robot:
                     continue
                 
                 goal_pos = [goal_x, goal_y]
+                
+                # 检查与其他终点的距离（使用1.0米最小距离）
+                collision_with_goals = False
+                for existing_goal in goal_list:
+                    existing_pos = existing_goal[0:2].flatten()
+                    if np.linalg.norm(goal_pos - existing_pos) < min_distance:
+                        collision_with_goals = True
+                        break
                 
                 # 检查与多边形障碍物的碰撞
                 collision_with_polygons = False
@@ -326,7 +377,7 @@ class env_robot:
                 goal_point_3d = np.array([[goal_x], [goal_y], [0]])
                 collision_with_other = self.check_collision(goal_point_3d, [], self.com, self.interval/2)
                 
-                if not collision_with_polygons and not collision_with_other:
+                if not collision_with_goals and not collision_with_polygons and not collision_with_other:
                     goal_list.append(np.array([[goal_x], [goal_y]]))
                     goal_found = True
                     actual_distance = np.sqrt((goal_x - start_point[0, 0])**2 + (goal_y - start_point[1, 0])**2)

@@ -293,7 +293,7 @@ class mobile_robot():
                         'other_position': [self.state[0, 0], self.state[1, 0]]
                     }
                     
-                    print('collisions between robots')
+                    # print('collisions between robots')
                     return True
 
         # check collision with obstacles
