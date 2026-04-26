@@ -362,8 +362,6 @@ class mobile_robot():
                         'obstacle_position': [edge[0], edge[1], edge[2], edge[3]],  # [x1, y1, x2, y2]
                         'robot_position': [self.state[0, 0], self.state[1, 0]]
                     }
-                    
-                    print('collisions between polygon obstacles')
                     return True
 
     def omni_state(self):
